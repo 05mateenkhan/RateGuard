@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime
@@ -9,48 +9,10 @@ from app.db.session import get_db
 from app.db.models.client import Client
 from app.db.redis import get_redis
 from app.services.limiter_service import LimiterService
+from app.services.cache_service import PolicyCacheService
 import redis.asyncio as redis
-import json
 
 router = APIRouter()
-
-async def get_policy_config(client_id: str, resource_key: str, db: AsyncSession, redis: redis.Redis) -> Dict[str, Any]:
-    """
-    Retrieves policy configuration using a cache-aside pattern.
-    """
-    cache_key = f"policy_cache:{client_id}:{resource_key}"
-    cached_policy = await redis.get(cache_key)
-
-    if cached_policy:
-        return json.loads(cached_policy)
-
-    # Cache miss: Query Postgres
-    from app.db.models.policy import Policy # Local import to avoid circular dependency
-    result = await db.execute(
-        select(Policy).where(Policy.client_id == client_id, Policy.resource_key == resource_key)
-    )
-    policy = result.scalar_one_or_none()
-
-    if not policy:
-        # Default policy if none exists
-        return {
-            "algorithm": "fixed_window",
-            "limit_count": 100,
-            "window_seconds": 60,
-            "burst_capacity": 100
-        }
-
-    policy_data = {
-        "id": str(policy.id),
-        "algorithm": policy.algorithm,
-        "limit_count": policy.limit_count,
-        "window_seconds": policy.window_seconds,
-        "burst_capacity": policy.burst_capacity or policy.limit_count,
-    }
-
-    # Cache for 1 hour
-    await redis.setex(cache_key, 3600, json.dumps(policy_data))
-    return policy_data
 
 @router.post("/check")
 async def check_rate_limit(
@@ -61,8 +23,19 @@ async def check_rate_limit(
     db: AsyncSession = Depends(get_db),
     redis: redis.Redis = Depends(get_redis)
 ):
-    # 1. Get Policy Config (Cached)
-    policy_cfg = await get_policy_config(str(client.id), resource_key, db, redis)
+    # 1. Get Policy Config (Using formalized CacheService)
+    cache_service = PolicyCacheService(redis)
+    policy_cfg = await cache_service.get_policy(str(client.id), resource_key, db)
+
+    if not policy_cfg:
+        # Default policy if none exists
+        policy_cfg = {
+            "id": "default",
+            "algorithm": "fixed_window",
+            "limit_count": 100,
+            "window_seconds": 60,
+            "burst_capacity": 100
+        }
 
     # 2. Dispatch to Limiter
     limiter_service = LimiterService(redis)
