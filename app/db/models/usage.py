@@ -3,6 +3,7 @@ from sqlalchemy import String, Integer, ForeignKey, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
+from datetime import datetime
 
 class UsageLog(Base):
     __tablename__ = "usage_logs"

@@ -3,7 +3,7 @@ from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
-
+from datetime import datetime
 class Policy(Base):
     __tablename__ = "policies"
 

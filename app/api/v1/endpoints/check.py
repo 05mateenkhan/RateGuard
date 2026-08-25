@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime
@@ -10,6 +10,7 @@ from app.db.models.client import Client
 from app.db.redis import get_redis
 from app.services.limiter_service import LimiterService
 from app.services.cache_service import PolicyCacheService
+from app.services.stats_service import StatsService
 import redis.asyncio as redis
 
 router = APIRouter()
@@ -19,6 +20,7 @@ async def check_rate_limit(
     response: Response,
     identifier: str,
     resource_key: str,
+    background_tasks: BackgroundTasks,
     client: Client = Depends(get_current_client),
     db: AsyncSession = Depends(get_db),
     redis: redis.Redis = Depends(get_redis)
@@ -50,7 +52,11 @@ async def check_rate_limit(
         burst_capacity=policy_cfg.get("burst_capacity")
     )
 
-    # 4. Set Headers (GitHub/Stripe style)
+    # 4. Track Usage (Non-blocking)
+    stats_service = StatsService(redis)
+    background_tasks.add_task(stats_service.track_request, policy_cfg["id"], result.allowed)
+
+    # 5. Set Headers (GitHub/Stripe style)
     response.headers["X-RateLimit-Limit"] = str(result.limit)
     response.headers["X-RateLimit-Remaining"] = str(result.remaining)
     response.headers["X-RateLimit-Reset"] = result.reset_at.isoformat()
