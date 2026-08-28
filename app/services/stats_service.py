@@ -39,6 +39,10 @@ class StatsService:
 
         # 1. Scan for all stats keys
         while True:
+            # result = self.redis.scan(cursor=cursor, match="stats:*")
+
+            # print("SCAN RESULT TYPE:", type(result))
+            # print("SCAN RESULT:", result)
             cursor, keys = await self.redis.scan(cursor=cursor, match="stats:*")
             if not keys:
                 break
