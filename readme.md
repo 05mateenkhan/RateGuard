@@ -254,10 +254,3 @@ async def rate_limit_check(identifier: str, resource_key: str):
 ```
 
 ---
-
-## 🧠 Hard Problems Solved (Interview Talking Points)
-
-- **The Race Condition Problem:** In a distributed environment, a simple `GET` and `SET` for a counter allows a race condition where multiple requests are allowed when only one should be. RateGuard solves this using **Redis Lua scripts** for the Token Bucket and **Atomic Pipelines** for the Sliding Log.
-- **The Database Bottleneck:** Hitting PostgreSQL on every request would destroy performance. I implemented a **layered caching strategy** (Auth Cache $\rightarrow$ Policy Cache) to ensure that the request path remains entirely in-memory.
-- **Availability vs. Correctness:** I implemented a configurable **Fail-Open** mechanism. If the Redis cluster fails, the system can be configured to allow all traffic (Fail-Open) to preserve user experience, or block all traffic (Fail-Closed) to protect the downstream services.
-- **Memory Leaks:** By using specific TTLs (Time-To-Live) for every counter key based on the policy window, RateGuard ensures that expired rate-limit data is automatically purged by Redis.
